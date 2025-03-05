@@ -1,0 +1,10 @@
+[package]
+name = "ptmc-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+enum_dispatch = "0.3.13"
+ndarray = "0.16.1"
+ndarray-linalg = {version = "0.17.0", features = ["openblas"]}
+rand = "0.9.0"

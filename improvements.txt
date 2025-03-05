@@ -1,0 +1,3 @@
+here ill list some possible locations for improved performance that i noticed during development
+
+1. in Output, ev_histogram can be initially uninit for spherical bc.
