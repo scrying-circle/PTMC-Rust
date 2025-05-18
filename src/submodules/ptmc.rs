@@ -1,10 +1,10 @@
 use std::mem::swap;
+use rayon::prelude::*;
+use crate::submodules::system_solver::SystemSolver;
 
-use rand::random;
+use super::{boundary_conditions::{BoundaryConditionTrait, Cubic, Periodic, PeriodicTrait, Rhombic, Spherical}, configurations::Configuration, energy_evaluation::PotentialKinds, ensembles::{EnsembleTrait, MoveStrategy, NPT}, initialisation::Initialiser, input_params::{EnergyBounds, MCParams, Output, TempGrid}, mc_state::MCState, test_contents::TestContents, type_lib::NumericData};
 
-use super::{boundary_conditions::{AperiodicTrait, BoundaryConditionTrait, Cubic, Periodic, PeriodicTrait, Rhombic, Spherical}, configurations::Configuration, energy_evaluation::PotentialKinds, ensembles::{EnsembleTrait, EnsembleVariablesTrait, MoveStrategy, NPT}, initialisation::Initialiser, input_params::{EnergyBounds, MCParams, Output, TempGrid}, mc_state::MCState, type_lib::NumericData};
-
-pub struct PTMC<E: EnsembleTrait, BC: BoundaryConditionTrait> {
+pub struct PTMC<E: EnsembleTrait + Sync, BC: BoundaryConditionTrait> {
     pub temp_grid: TempGrid,
     pub mc_params: MCParams,
     pub ensemble: E,
@@ -17,7 +17,7 @@ pub struct PTMC<E: EnsembleTrait, BC: BoundaryConditionTrait> {
     pub n_steps: usize,
 }
 
-impl<E: EnsembleTrait, BC: BoundaryConditionTrait> PTMC<E, BC> {
+impl<E: EnsembleTrait + Sync, BC: BoundaryConditionTrait> PTMC<E, BC> {
     pub fn exchange_acceptance(beta1: NumericData, beta2: NumericData, energy1: NumericData, energy2: NumericData) -> NumericData {
         ((beta1 - beta2) * (energy1 - energy2)).exp().min(1.0)
     }
@@ -33,14 +33,20 @@ impl<E: EnsembleTrait, BC: BoundaryConditionTrait> PTMC<E, BC> {
         swap(&mut state1.ensemble_variables, &mut state2.ensemble_variables);
     }
 
-    pub fn postprocess(&mut self) {
-        let (histogram, energy_vector, sums) = self.results.process_histogram(&mut self.results.readfile());
-
-
+    pub fn postprocess(&mut self) -> SystemSolver {
+        let energy_vector = self.results.readfile();
+        TestContents::print(&self.results.energy_histogram, "raw_hist.json");
+        TestContents::print(&self.temp_grid.beta_grid, "beta.json");
+        TestContents::print(&energy_vector, "energy_vector.json");
+        let (processed_histogram, processed_energy_vector, sums) = self.results.process_histogram(&energy_vector);
+        TestContents::print(&processed_histogram, "processed_histogram.json");
+        TestContents::print(&self.results.energy_histogram.shape()[0], "n_traj.json");
+        TestContents::print(&self.results.energy_histogram.shape()[1], "n_bins.json");
+        SystemSolver::multihistogram(&processed_histogram, &processed_energy_vector, &self.temp_grid.beta_grid, &sums)
     }
 }
 
-impl <E: EnsembleTrait> PTMC<E, Spherical> {
+impl <E: EnsembleTrait + Sync> PTMC<E, Spherical> {
     pub fn parallel_tempering_exchange(&mut self) {
         let n_exc = rand::random_range(0..self.mc_params.trajectory_number-1);
     
@@ -58,11 +64,11 @@ impl <E: EnsembleTrait> PTMC<E, Spherical> {
     }
 
     pub fn mc_step(&mut self, n_steps: usize) {
-        for state in self.mc_states.iter_mut() {
+        self.mc_states.par_iter_mut().for_each(|state|
             for _ in 0..n_steps {
                 state.mc_move(&self.move_strategy, &self.potential);
             }
-        }
+        );
     }
 
     pub fn mc_cycle(&mut self, n_steps: usize, index: usize) {
@@ -109,7 +115,7 @@ impl <E: EnsembleTrait> PTMC<E, Spherical> {
         for state in self.mc_states.iter_mut() {
             state.reset_counters();
         }
-
+        TestContents::print(&self.energy_bounds, "energy_bounds.json");
         self.results.initialise_histograms_spherical(&self.energy_bounds, &self.mc_states[0].configuration.boundary_condition);
     }
 

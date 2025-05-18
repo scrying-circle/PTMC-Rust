@@ -1,7 +1,7 @@
 use std::{f32::consts::PI, ops::Index};
 
 use enum_dispatch::enum_dispatch;
-use ndarray::{s, Array, Array1, Array2};
+use ndarray::{s, Array1, Array2};
 
 use super::{boundary_conditions::{BoundaryConditionTrait, PeriodicTrait}, configurations::Configuration, type_lib::{NumericData, Position}};
 

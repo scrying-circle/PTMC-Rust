@@ -1,7 +1,6 @@
 use enum_dispatch::enum_dispatch;
 use rand::random;
 
-use super::ensembles::NNVT;
 use super::func_lib::get_tan;
 use super::type_lib::NumericData;
 use super::type_lib::Position;

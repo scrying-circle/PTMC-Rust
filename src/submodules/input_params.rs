@@ -1,8 +1,8 @@
-use std::mem::MaybeUninit;
 
-use ndarray::{s, Array, Array2, Array3, ArrayBase, Axis, Dim, OwnedRepr};
+use ndarray::{s, Array2, Array3, ArrayBase, AssignElem, Axis, Dim, OwnedRepr};
+use serde::{Deserialize, Serialize};
 
-use super::{boundary_conditions::{BoundaryConditionTrait, Cubic, Periodic, PeriodicTrait, Rhombic, Spherical}, mc_state::{self, MCState}, type_lib::NumericData};
+use super::{boundary_conditions::{BoundaryConditionTrait, Cubic, Periodic, PeriodicTrait, Rhombic, Spherical}, mc_state::MCState, test_contents::TestContents, type_lib::NumericData};
 
 pub struct MCParams {
     pub mc_cycles: usize,
@@ -39,7 +39,8 @@ pub struct TempGrid {
 
 impl TempGrid {
     pub fn new_equally_spaced(t_min: NumericData, t_max: NumericData, n_traj: usize) -> Self {
-        let t_grid: Vec<NumericData> = (0..n_traj).map(|i| t_min + (t_max - t_min)/((n_traj-1) * i) as NumericData).collect();
+        let delta = (t_max - t_min) / (n_traj - 1) as NumericData;
+        let t_grid: Vec<NumericData> = (0..n_traj).map(|i| t_min + i as NumericData * delta as NumericData).collect();
         let beta_grid = t_grid.iter().map(|&t| 1.0 / t / 3.16681196e-6).collect();
         TempGrid {
             t_grid,
@@ -79,7 +80,7 @@ pub struct Output {
 }
 
 impl Output {
-    pub fn bin_number(mc_params: &MCParams, n_atoms: usize) -> Self {
+    pub fn bin_number(mc_params: &MCParams) -> Self {
         Output {
             bin_number: mc_params.bin_number,
             min_energy: 0.0,
@@ -181,7 +182,7 @@ impl Output {
     }
 
     pub fn find_energy_histogram_index<T: BoundaryConditionTrait>(&self, mc_state: &MCState<T>) -> usize {
-        Output::get_histogram_index((mc_state.total_energy - self.min_energy)/self.delta_energy_hist + 1.0, self.bin_number)
+        Output::get_histogram_index((mc_state.total_energy - self.min_energy)/self.delta_energy_hist + 1.0, self.bin_number) - 1
     }
 
     pub fn find_volume_histogram_index(&self, mc_state: &MCState<Periodic>) -> usize {
@@ -233,34 +234,39 @@ impl Output {
         (0..self.bin_number).map(|i| self.min_energy + i as NumericData * de).collect::<Vec<_>>()
     }
 
-    pub fn process_histogram(&mut self, energy_vector: &Vec<NumericData>) -> (ArrayBase<OwnedRepr<NumericData>, Dim<[usize; 2]>>, Vec<NumericData>, Vec<NumericData>) {
-        for value in self.energy_histogram.iter_mut() {
-            *value /= self.bin_number as NumericData;
-        }
+    pub fn process_histogram(&mut self, energy_vector: &Vec<NumericData>) -> (Array2<NumericData>, Vec<NumericData>, Vec<NumericData>) {
+        let mut sums = self.energy_histogram.axis_iter(Axis(1))
+        .map(|row| row.sum()/self.bin_number as NumericData)
+        .collect::<Vec<_>>();
 
-        let mut sums = vec![0.0; self.bin_number];
-        for i in 0..self.bin_number {
-            sums[i] = self.energy_histogram.slice(s![..,i]).sum();
-        }
+        let mut mask = sums.iter()
+        .map(|value| *value != 0.0)
+        .collect::<Vec<bool>>();
 
-        let mask: Vec<bool> = self.energy_histogram.axis_iter(Axis(0))
-        .map(|row| row.iter().any(|&x| x != 0.0))
-        .collect();
+        mask.first_mut().unwrap().assign_elem(false);
+        mask.last_mut().unwrap().assign_elem(false);
 
-        let processed_histogram = self.energy_histogram.select(Axis(0), &mask.iter().enumerate()
+        let mut processed_histogram = self.energy_histogram.select(Axis(1), &mask.iter().enumerate()
         .filter_map(|(i, &keep)| keep.then_some(i))
         .collect::<Vec<_>>());
 
-        let processed_energy_vector = mask.iter().enumerate()
+        for item in processed_histogram.iter_mut() {
+            *item /= self.bin_number as NumericData;
+        }
+
+        let processed_energy_vector = mask.iter().skip(1).take(self.bin_number).enumerate()
         .filter_map(|(i, &keep)| keep.then_some(energy_vector[i])).collect::<Vec<_>>();
-
-        sums.retain(|&x| x != 0.0);
-
+        TestContents::print(&processed_energy_vector, "processed_energy_vector.json");
+        let mut iter = mask.iter();
+        sums.retain(|_| *iter.next().unwrap());
+        println!("{:?}", processed_histogram);
         (processed_histogram, processed_energy_vector, sums)
         
     }
 }
 
+#[derive(Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct EnergyBounds {
     pub min_energy: NumericData,
     pub max_energy: NumericData,

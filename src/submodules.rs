@@ -9,3 +9,4 @@ pub mod mc_state;
 pub mod initialisation;
 pub mod ptmc;
 pub mod system_solver;
+pub mod test_contents;

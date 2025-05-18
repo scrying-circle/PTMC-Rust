@@ -1,4 +1,4 @@
-use super::{boundary_conditions::{BoundaryConditionTrait, Periodic, Spherical}, configurations::Configuration, energy_evaluation::PotentialKinds, ensembles::{EnsembleTrait, MoveStrategy}, input_params::{MCParams, Output, TempGrid}, mc_state::MCState, type_lib::NumericData};
+use super::{boundary_conditions::{BoundaryConditionTrait, Periodic, Spherical}, configurations::Configuration, energy_evaluation::PotentialKinds, ensembles::{EnsembleTrait, MoveStrategy}, input_params::{MCParams, Output, TempGrid}, mc_state::MCState};
 
 pub struct Initialiser<BC: BoundaryConditionTrait, E: EnsembleTrait> {
     pub mc_states: Vec<MCState<BC>>,
@@ -17,7 +17,7 @@ impl<E: EnsembleTrait> Initialiser<Spherical, E> {
             let beta = temp_grid.beta_grid[i];
             start_config.get_mc_state(temperature, beta, ensemble, potential)
         }).collect();
-        let results = Output::bin_number(mc_params, start_config.number_of_atoms);
+        let results = Output::bin_number(mc_params);
         //results.min_energy = mc_states[0].total_energy; bug?
 
         Initialiser {
@@ -39,7 +39,7 @@ impl <E: EnsembleTrait> Initialiser<Periodic, E> {
             let beta = temp_grid.beta_grid[i];
             start_config.get_mc_state(temperature, beta, ensemble, potential)
         }).collect();
-        let results = Output::bin_number(mc_params, start_config.number_of_atoms);
+        let results = Output::bin_number(mc_params);
         //results.min_energy = mc_states[0].total_energy; bug?
 
         Initialiser {

@@ -1,7 +1,7 @@
 use std::mem::swap;
 
 use ndarray::{Array1, Array2};
-use super::{boundary_conditions::{AperiodicTrait, BoundaryConditionTrait, Cubic, Periodic, PeriodicTrait, Rhombic, Spherical}, configurations::Configuration, energy_evaluation::{Dimer, MagneticDimer, PotentialKinds, PotentialVariableKinds, PotentialVariablesTrait}, ensembles::{EnsembleTrait, EnsembleVariableKinds, EnsembleVariablesTrait, MoveStrategy, MoveType, NPTVariables, NPT}, input_params::Output, type_lib::{NumericData, Position}};
+use super::{boundary_conditions::{AperiodicTrait, BoundaryConditionTrait, Cubic, Periodic, PeriodicTrait, Rhombic, Spherical}, configurations::Configuration, energy_evaluation::{Dimer, MagneticDimer, PotentialKinds, PotentialVariableKinds, PotentialVariablesTrait}, ensembles::{EnsembleTrait, EnsembleVariableKinds, EnsembleVariablesTrait, MoveStrategy, MoveType, NPT}, type_lib::NumericData};
 
 pub struct MCState<BC: BoundaryConditionTrait> {
     pub temperature: NumericData,
@@ -195,6 +195,12 @@ impl MCState<Spherical> {
                 if count == 100 {panic!("Too many moves out of binding sphere.")}
             }
         }
+
+        self.ensemble_variables.set_trial_move(trial_pos);
+        for (new_dist, pos) in self.new_distance_vec.iter_mut().zip(self.configuration.position_vector.iter()) {
+            *new_dist = self.configuration.boundary_condition.distance_squared(self.ensemble_variables.trial_move(), pos);
+        }
+        self.new_distance_vec[self.ensemble_variables.atom_index()] = 0.0;
     }
 
     pub fn swap_atoms(&mut self) {
@@ -222,15 +228,15 @@ impl MCState<Spherical> {
                 if let MoveType::AtomMove = move_type {
                     match potential {
                         PotentialKinds::ELJ(dimer) => {
-                            self.new_energy = self.total_energy + dimer.energy_update(self.ensemble_variables.atom_index(), &self.distance2_mat, &self.new_distance_vec)
+                            self.new_energy = self.total_energy + dimer.energy_update(self.ensemble_variables.atom_index(), &self.distance2_mat, &self.new_distance_vec);
                         },
                         PotentialKinds::ELJEven(dimer) => {
-                            self.new_energy = self.total_energy + dimer.energy_update(self.ensemble_variables.atom_index(), &self.distance2_mat, &self.new_distance_vec)
+                            self.new_energy = self.total_energy + dimer.energy_update(self.ensemble_variables.atom_index(), &self.distance2_mat, &self.new_distance_vec);
                         },
                         PotentialKinds::ELJB(magnetic_dimer) => {
                             match self.potential_variables {
                                 PotentialVariableKinds::Magnetic(ref mut magnetic) => {
-                                    self.new_energy = self.total_energy + magnetic_dimer.energy_update(self.ensemble_variables.atom_index(), &self.distance2_mat, &self.new_distance_vec, magnetic, self.ensemble_variables.trial_move(), &self.configuration)
+                                    self.new_energy = self.total_energy + magnetic_dimer.energy_update(self.ensemble_variables.atom_index(), &self.distance2_mat, &self.new_distance_vec, magnetic, self.ensemble_variables.trial_move(), &self.configuration);
                                 },
                                 _ => panic!("Wrong potential variables for magnetic dimer.")
                             }
@@ -319,7 +325,6 @@ impl<BC: BoundaryConditionTrait> MCState<BC> {
         swap(&mut self.new_energy, &mut self.total_energy);
         self.count_atom[0] += 1;
         self.count_atom[1] += 1;
-
         self.potential_variables.swap_vars(atom_index);
     }
 

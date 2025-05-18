@@ -1,7 +1,6 @@
 use crate::submodules::boundary_conditions::*;
 use crate::submodules::type_lib::NumericData;
 use crate::submodules::type_lib::Position;
-use ndarray::array;
 use ndarray::Array1;
 use ndarray::Array2;
 use rand::random;
